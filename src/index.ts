@@ -76,12 +76,19 @@ type Bindings={
 
 const app = new Hono<{Bindings:Bindings}>()
 
-app.use('/*',cors(
-  {origin:'http://localhost:5173',
-  allowMethods:['POST','PUT','OPTIONS']
-}
-  ))
+app.use('*', async (c, next) => {
 
+  // CORS middleware configuration
+  const corsMiddleware = cors({
+    origin: 'http://localhost:5173',
+    allowHeaders: ['Origin', 'Content-Type', 'Authorization'],
+    allowMethods: ['GET', 'OPTIONS', 'POST', 'PUT', 'DELETE'],
+    credentials: true,
+  })
+
+  // Apply CORS middleware to all routes to allow cross-origin requests
+  return await corsMiddleware(c, next)
+})
   //SIGNUP REQUEST
   app.post('/signup', async (c) => {
     try {
@@ -669,8 +676,8 @@ app.get('/getGroupsForUserAndnotcollege/:member_id/:college_id', async (c) => {
           FROM "group"
           WHERE member = ?
       )
-      AND member != ?  -- Check that member_id is not equal to the member field
-      AND group_id NOT IN ( -- Exclude duplicate group IDs
+      AND member != ? 
+      AND group_id NOT IN ( 
           SELECT DISTINCT group_id
           FROM "group"
           WHERE member = ? AND created_by != ?
