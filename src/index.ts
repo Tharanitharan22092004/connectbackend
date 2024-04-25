@@ -1,5 +1,7 @@
 import {Hono} from 'hono'
 import { cors } from 'hono/cors';
+import { D1Database, D1Result } from 'hono';
+
 
 type Post ={
    post_id:number;
@@ -72,6 +74,7 @@ type chat ={
 
 type Bindings={
   DB: D1Database
+  CONNECTIMG:KVNamespace;
 }
 
 const app = new Hono<{Bindings:Bindings}>()
@@ -89,6 +92,48 @@ app.use('*', async (c, next) => {
   // Apply CORS middleware to all routes to allow cross-origin requests
   return await corsMiddleware(c, next)
 })
+
+//updated code
+
+// app.post('/upload', async (c) => {
+
+//   try {
+//     const formData = await c.req.formData();
+
+//     const fileData = formData.get('image') as unknown as File;
+//     if (!fileData) {
+//       return c.json({ error: 'No file provided' }, 400);
+//     }
+  
+//     const fileBlob = new File([await fileData.arrayBuffer()], fileData.name, {
+//       type: fileData.type,
+//     });
+//     const key = `${new Date().getTime()}-${fileBlob.name}`;
+//     const fileBuffer = await fileBlob.arrayBuffer();
+  
+//     try {
+//       if (c.env && c.env.CONNECTIMG) {
+//         await c.env.CONNECTIMG.put(key, fileBuffer);
+//         return c.json({ url: `https://<YOUR_WORKER_DOMAIN>/.well-known/kv/${key} `});
+//       } else {
+//         throw new Error('KV namespace is not available');
+//       }
+//     } catch (error:any) {
+//       return c.json({ error: error.message }, 500);
+//     }
+    
+//   } catch (error:any) {
+//     return c.json({ error: error.message }, 500);
+//   }
+
+    
+//   }
+ 
+// )
+
+
+
+
   //SIGNUP REQUEST
   app.post('/signup', async (c) => {
     try {
@@ -332,28 +377,152 @@ else{
   
    //POST REQUEST
 
-   //for posting the post details by all credentials in the post_table
-    app.post('/post/all', async (c) => {
-      const { user_id, post_title,post_description} =await c.req.json();
+  //  for posting the post details by all credentials in the post_table
+  //   app.post('/post/all', async (c) => {
+  //     const { user_id, post_title,post_description} =await c.req.json();
 
-      if(user_id!='' || post_title!='' || post_description!='') {
-      const{success} = await c.env.DB.prepare(`INSERT INTO post(user_id, post_title,post_description) VALUES(?,?,?)`).bind(user_id,post_title,post_description).run();
+  //     if(user_id!='' || post_title!='' || post_description!='') {
+  //     const{success} = await c.env.DB.prepare(`INSERT INTO post(user_id, post_title,post_description) VALUES(?,?,?)`).bind(user_id,post_title,post_description).run();
       
-      if(success){
-        return c.text("Post created successfully")
+  //     if(success){
+  //       return c.text("Post created successfully")
+  //     }
+  //     else{
+  //       return c.text("Failed")
+  //     }
+  //   }
+  //   else{
+  //     return c.text("Please fill all the fields")
+  //   }
+  // });
+
+
+  // Post that include the imagge user_id and post_title and post_description
+
+
+
+// Post endpoint to store data
+app.post('/post/all', async (c) => {
+  try {
+      const formData = await c.req.formData();
+
+      const fileData = formData.get('image') as unknown as File;
+      if (!fileData) {
+          return c.json({ error: 'No file provided' }, 400);
       }
-      else{
-        return c.text("Failed")
+      
+      const fileBlob = new File([await fileData.arrayBuffer()], fileData.name,{
+          type: fileData.type,
+      });
+      const img_url = `${new Date().getTime()}-${fileBlob.name}`;
+      const fileBuffer = await fileBlob.arrayBuffer();
+
+      try {
+          if (c.env && c.env.CONNECTIMG) {
+              await c.env.CONNECTIMG.put(img_url, fileBuffer);
+              const imageUrl = `https://connectapi.tharanitharan-n2022cse.workers.dev/.well-known/kv/${img_url}`;
+
+              // Check if 'json' key exists in formData
+              if (!formData.has('json')) {
+                  return c.json({ error: 'No JSON data provided' }, 400);
+              }
+
+              // Parse JSON data from the form data
+              const jsonData = formData.get('json');
+              const { user_id, post_title, post_description } = JSON.parse(jsonData as string) as Post;
+
+              if (user_id && post_title && post_description) {
+                  const { success } = await c.env.DB.prepare(`INSERT INTO post(user_id, post_title, post_description, img_url) VALUES(?,?,?,?)`).bind(user_id, post_title, post_description, img_url).run();
+
+                  if (success) {
+                      return c.text("Post created successfully");
+                  } else {
+                      return c.text("Failed to create post");
+                  }
+              } else {
+                  return c.text("Please provide user ID, post title, and post description");
+              }
+          } else {
+              throw new Error('KV namespace is not available');
+          }
+      } catch (error:any) {
+          return c.json({ error: error.message }, 500);
       }
-    }
-    else{
-      return c.text("Please fill all the fields")
-    }
-  });
+  } catch (error:any) {
+      return c.json({ error: error.message }, 500);
+  }
+});
+
+// Get endpoint to retrieve all posts
+app.get('/getpost/all', async (c) => {
+  try {
+      const db: D1Database = c.env.DB;
+      const postsPromise = db.prepare('SELECT * FROM post').all();
+      const postsResult = (await postsPromise) as D1Result<Record<string, unknown>>;
+      const result: { [key: string]: any }[] = [];
+
+      for await (const post of postsResult[Symbol.asyncIterator]()) {
+          const imageUrl = `https://connectapi.tharanitharan-n2022cse.workers.dev/.well-known/kv/${post.img_url}`;
+          result.push({
+              ...post,
+              img_url: imageUrl
+          });
+      }
+
+      return c.json(result);
+  } catch (error: any) {
+      return c.json({ error: error.message }, 500);
+  }
+});
 
 
 
-//for posting the post by using the user_id into the post table
+
+
+// Function to convert array buffer to base64
+
+
+
+
+// app.get('/getpost/all', async (c) => {
+//   try {
+//       const stmt = await c.env.DB.prepare(`SELECT *, img_url FROM post`);
+//       const posts = await stmt.all();
+
+//       if (!Array.isArray(posts)) {
+//           throw new Error("No posts found");
+//       }
+
+//       const result = [];
+
+//       for (const post of posts) {
+//           const imageUrl = `https://<YOUR_WORKER_DOMAIN>/.well-known/kv/${post.img_url}`;
+//           const response = await fetch(imageUrl);
+          
+//           if (!response.ok) {
+//               throw new Error("Failed to fetch image data");
+//           }
+
+//           const imageData = await response.arrayBuffer();
+//           const base64Image = Buffer.from(imageData).toString('base64');
+          
+//           result.push({
+//               ...post,
+//               img_data: base64Image  // Add base64 image data to the result
+//           });
+//       }
+
+//       return c.json(result);
+//   } catch (error:any) {
+//       return c.json({ error: error.message }, 500);
+//   }
+// });
+
+
+
+
+
+  //for posting the post by using the user_id into the post table
     app.post('/post/:user_id',async(c)=>{
       try{
       const {post_title,post_description} = await c.req.json();
@@ -378,10 +547,10 @@ else{
     
 
     //for getting the all the post from the post table
-    app.get('/getpost/all', async (c) => {
-      const posts = await c.env.DB.prepare(`SELECT * FROM post`).all();
-      return c.json(posts);
-    });
+    // app.get('/getpost/all', async (c) => {
+    //   const posts = await c.env.DB.prepare(`SELECT * FROM post`).all();
+    //   return c.json(posts);
+    // })  ;
     
 
     //for getting the post by using the user_id from the post table

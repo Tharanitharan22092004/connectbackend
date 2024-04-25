@@ -4,9 +4,9 @@ compatibility_date = "2023-12-01"
 # [vars]
 # MY_VARIABLE = "production_value"
 
-# [[kv_namespaces]]
-# binding = "MY_KV_NAMESPACE"
-# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+[[kv_namespaces]]
+binding = "CONNECTIMG"
+id = "d8e2bc7f01434f1db5667cbbff34c22e"
 
 # [[r2_buckets]]
 # binding = "MY_BUCKET"
